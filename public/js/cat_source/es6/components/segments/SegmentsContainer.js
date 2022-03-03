@@ -126,7 +126,7 @@ function SegmentsContainer({
 
   const getSegmentRealHeight = useCallback(
     ({segment, previousSegment}) => {
-      console.log('----> get height', segment.get('sid'))
+      // console.log('----> get height', segment.get('sid'))
       const container = document.createElement('div', {})
       const html = getSegmentStructure(segment.toJS(), isSideOpen)
       container.innerHTML = ReactDOMServer.renderToStaticMarkup(html)
@@ -197,33 +197,8 @@ function SegmentsContainer({
     setScrollTopVisible(scrollValue > 400)
   }, [scrollToSid])
 
-  // segments props
-  const segmentsProps = useMemo(() => {
-    const getSegmentProps = (
-      segment,
-      segImmutable,
-      currentFileId,
-      collectionTypeSeparator,
-    ) => {
-      return {
-        segment,
-        segImmutable,
-        timeToEdit: config.time_to_edit_enabled,
-        isReview,
-        isReviewExtended: !!isReviewExtended,
-        reviewType,
-        enableTagProjection,
-        tagModesEnabled,
-        speech2textEnabledFn: Speech2Text.enabled,
-        setLastSelectedSegment: (sid) => setLastSelectedSegment({sid}),
-        setBulkSelection,
-        sideOpen: isSideOpen,
-        files: files,
-        currentFileId: currentFileId.toString(),
-        collectionTypeSeparator,
-      }
-    }
-
+  // segments details - ex. div collection type ecc.
+  const segmentsDetails = useMemo(() => {
     const getCollectionType = (segment) => {
       let collectionType
       if (segment.notes) {
@@ -279,26 +254,15 @@ function SegmentsContainer({
           segmentsWithCollectionType.push(segment.sid)
         }
       }
-      const segmentProps = getSegmentProps(
-        segment,
-        segImmutable,
+      const props = {
+        sid: segImmutable.get('sid'),
         currentFileId,
         collectionTypeSeparator,
-      )
+      }
       currentFileId = segment.id_file
-      return segmentProps
+      return props
     })
-  }, [
-    enableTagProjection,
-    files,
-    isReview,
-    isReviewExtended,
-    isSideOpen,
-    reviewType,
-    segments,
-    setBulkSelection,
-    tagModesEnabled,
-  ])
+  }, [files, isSideOpen, segments])
 
   // set width and height of area
   useEffect(() => {
@@ -376,22 +340,27 @@ function SegmentsContainer({
 
   // set list rows
   useEffect(() => {
-    if (!segments) return
-    setHasCachedRows(false)
+    const haveSegmentsChanges = !!segments.find((segment, index) => {
+      const previousSegment = rows[index]?.segImmutable
+      return previousSegment?.get('opened') !== segment.get('opened')
+    })
+
+    if (!segments || !haveSegmentsChanges) return
+    if (segments.size !== rows.length) setHasCachedRows(false)
     setRows((prevState) =>
       new Array(segments.size).fill({}).map((item, index) => {
-        const prevStateRow = prevState.find(
-          ({id}) => id === segments.get(index).get('sid'),
-        )
+        const newestSegment = segments.get(index)
+        const newestSid = newestSegment.get('sid')
+        const prevStateRow = prevState.find(({id}) => id === newestSid)
         return {
-          id: segments.get(index).get('sid'),
+          id: newestSid,
           height: prevStateRow?.height ?? ROW_HEIGHT,
           hasRendered: prevStateRow?.hasRendered ?? false,
-          segImmutable: segments.get(index),
+          segImmutable: newestSegment,
         }
       }),
     )
-  }, [segments])
+  }, [segments, rows])
 
   // cache rows before start index
   useEffect(() => {
@@ -487,7 +456,7 @@ function SegmentsContainer({
   // updating rows height
   useEffect(() => {
     if (startIndex === undefined || !stopIndex || !hasCachedRows) return
-    console.log('startIndex', startIndex, 'stopIndex', stopIndex)
+    // console.log('startIndex', startIndex, 'stopIndex', stopIndex)
     setRows((prevState) => {
       // update with new height
       const nextState = prevState.map((row, index) =>
@@ -558,9 +527,9 @@ function SegmentsContainer({
     }
   }, [rows, essentialRows, hasCachedRows, startIndex, stopIndex])
 
-  useEffect(() => {
-    console.log('essentialRows', essentialRows)
-  }, [essentialRows])
+  // useEffect(() => {
+  //   console.log('essentialRows', essentialRows)
+  // }, [essentialRows])
 
   // set padding top to list ref (Comments padding)
   useEffect(() => {
@@ -613,9 +582,34 @@ function SegmentsContainer({
     persistenceVariables.current.haveBeenAddedSegmentsBefore = false
   }, [rows, essentialRows, hasCachedRows, startIndex, stopIndex])
 
-  useEffect(() => {
-    console.log('####', scrollToSid)
-  }, [scrollToSid])
+  // useEffect(() => {
+  //   console.log('####', scrollToSid)
+  // }, [scrollToSid])
+
+  // single segment props to move down RowSegment component
+  const getSegmentPropsBySid = (sid) => {
+    const {currentFileId, collectionTypeSeparator} = segmentsDetails.find(
+      ({sid: iteratedSid}) => iteratedSid === sid,
+    )
+    const {segment, segImmutable} = cachedSegmentsToJS.current.get(sid)
+    return {
+      segment,
+      segImmutable,
+      timeToEdit: config.time_to_edit_enabled,
+      isReview,
+      isReviewExtended: !!isReviewExtended,
+      reviewType,
+      enableTagProjection,
+      tagModesEnabled,
+      speech2textEnabledFn: Speech2Text.enabled,
+      setLastSelectedSegment: (sid) => setLastSelectedSegment({sid}),
+      setBulkSelection,
+      sideOpen: isSideOpen,
+      files: files,
+      currentFileId: currentFileId.toString(),
+      collectionTypeSeparator,
+    }
+  }
 
   const goToFirstSegment = () => SegmentActions.scrollToSegment(firstJobSegment)
 
@@ -639,9 +633,7 @@ function SegmentsContainer({
             <RowSegment
               {...{
                 ...essentialRows[index],
-                ...segmentsProps.find(
-                  ({segment}) => segment.sid === essentialRows[index].id,
-                ),
+                ...getSegmentPropsBySid(essentialRows[index].id),
                 ...(index === essentialRows.length - 1 && {isLastRow: true}),
               }}
             />
