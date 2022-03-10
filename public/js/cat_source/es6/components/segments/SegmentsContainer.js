@@ -68,6 +68,7 @@ function SegmentsContainer({
     lastScrollTop: 0,
     segmentsWithCollectionType: [],
     haveBeenAddedSegmentsBefore: false,
+    isUserDraggingCursor: false,
   })
   const rowsRenderedHeight = useRef(new Map())
   const cachedRowsHeightMap = useRef(new Map())
@@ -300,6 +301,10 @@ function SegmentsContainer({
     const closeSide = () => setIsSideOpen(false)
     const storeJobInfo = (files) => setFiles(files)
     const onAddComment = (sid) => setAddedComment({sid})
+    const mousedownHandler = () =>
+      (persistenceVariables.current.isUserDraggingCursor = true)
+    const mouseupHandler = () =>
+      (persistenceVariables.current.isUserDraggingCursor = false)
 
     SegmentStore.addListener(SegmentConstants.RENDER_SEGMENTS, renderSegments)
     SegmentStore.addListener(
@@ -315,6 +320,8 @@ function SegmentsContainer({
     CatToolStore.addListener(CatToolConstants.STORE_FILES_INFO, storeJobInfo)
     CommentsStore.addListener(CommentsConstants.ADD_COMMENT, onAddComment)
 
+    document.addEventListener('mousedown', mousedownHandler)
+    document.addEventListener('mouseup', mouseupHandler)
     return () => {
       SegmentStore.removeListener(
         SegmentConstants.RENDER_SEGMENTS,
@@ -335,6 +342,9 @@ function SegmentsContainer({
         storeJobInfo,
       )
       CommentsStore.removeListener(CommentsConstants.ADD_COMMENT, onAddComment)
+
+      document.removeEventListener('mousedown', mousedownHandler)
+      document.removeEventListener('mouseup', mouseupHandler)
     }
   }, [])
 
@@ -348,11 +358,9 @@ function SegmentsContainer({
     if (!segments || !haveSegmentsChanges) return
     if (segments.size !== rows.length) setHasCachedRows(false)
     setRows(
-      /* (prevState) => */
       new Array(segments.size).fill({}).map((item, index) => {
         const newestSegment = segments.get(index)
         const newestSid = newestSegment.get('sid')
-        // const prevStateRow = prevState.find(({id}) => id === newestSid)
         const hasRendered = !!rowsRenderedHeight.current.get(newestSid)
         const cachedHeight = newestSegment.get('opened')
           ? rowsRenderedHeight.current.get(newestSid)
@@ -362,8 +370,8 @@ function SegmentsContainer({
           : {height: ROW_HEIGHT, hasRendered: false}
         return {
           id: newestSid,
-          height: prevStateRow?.height /* ?? ROW_HEIGHT */,
-          hasRendered: prevStateRow?.hasRendered /* ?? false */,
+          height: prevStateRow?.height,
+          hasRendered: prevStateRow?.hasRendered,
           segImmutable: newestSegment,
         }
       }),
@@ -498,10 +506,11 @@ function SegmentsContainer({
 
   // set essential rows of virtual list component
   useEffect(() => {
+    const {haveBeenAddedSegmentsBefore, isUserDraggingCursor} =
+      persistenceVariables.current
     if (
       !hasCachedRows ||
-      (startIndex === 0 &&
-        persistenceVariables.current.haveBeenAddedSegmentsBefore)
+      (startIndex === 0 && haveBeenAddedSegmentsBefore && !isUserDraggingCursor)
     )
       return
     if (essentialRows.length !== rows.length) {
